@@ -10,15 +10,18 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// Servim fișiere statice pentru interfață
+app.use(express.static('public'));
+
 // Rute
 app.get('/', (req, res) => {
-  res.send('PDF Generator Service is running');
+  res.sendFile(__dirname + '/public/index.html');
 });
 
 // Ruta pentru generarea PDF
 app.get('/generate-pdf', async (req, res) => {
   try {
-    const { id, urls } = req.query;
+    const { id, urls, sectionsToRemove } = req.query;
     
     if (!id && !urls) {
       return res.status(400).send('Missing job ID or URLs');
@@ -52,39 +55,29 @@ app.get('/generate-pdf', async (req, res) => {
         return res.status(400).send('No valid URLs provided');
       }
       
+      // Procesăm secțiunile de eliminat
+      let sectionsToRemoveArray = [];
+      if (sectionsToRemove) {
+        sectionsToRemoveArray = sectionsToRemove.split(',')
+          .map(section => section.trim())
+          .filter(section => section);
+        console.log(`Sections to remove: ${JSON.stringify(sectionsToRemoveArray)}`);
+      }
+      
       job = {
         name: req.query.name || 'Generated PDF',
         urls: validUrls,
         options: {
           pageSize: req.query.pageSize || 'A4',
-          landscape: req.query.landscape === 'true'
+          landscape: req.query.landscape === 'true',
+          sectionsToRemove: sectionsToRemoveArray
         }
       };
       
       console.log('Created job:', JSON.stringify(job));
     } else if (id) {
-      // Dacă avem un ID, încercăm să obținem job-ul din baza de date
-      // Această parte poate fi implementată dacă dorești să conectezi la MongoDB
-      // și să preiei job-ul din baza de date
-      /*
-      const { connectToDatabase } = require('./db');
-      const { ObjectId } = require('mongodb');
-      
-      const db = await connectToDatabase();
-      const jobsCollection = db.collection('jobs');
-      
-      try {
-        job = await jobsCollection.findOne({ _id: new ObjectId(id) });
-      } catch (e) {
-        job = await jobsCollection.findOne({ _id: id });
-      }
-      
-      if (!job) {
-        return res.status(404).send('Job not found');
-      }
-      */
-      
-      // Pentru moment, returnăm o eroare pentru că nu avem implementată această funcționalitate
+      // Implementarea pentru folosirea ID-ului unui job existent ar veni aici
+      // Deocamdată, doar returnăm o eroare
       return res.status(400).send('Job fetching by ID not implemented yet');
     }
     
@@ -102,15 +95,6 @@ app.get('/generate-pdf', async (req, res) => {
       return res.status(500).send('Generated PDF is empty');
     }
     
-    // Verificăm dacă este un PDF valid (începe cu %PDF-)
-    const isPdf = pdfBuffer.length > 5 && 
-                 pdfBuffer.toString('ascii', 0, 5) === '%PDF-';
-                 
-    if (!isPdf) {
-      console.warn('Warning: Generated content does not appear to be a valid PDF');
-      console.log('First 20 bytes:', pdfBuffer.toString('ascii', 0, 20));
-    }
-    
     // Trimitem PDF-ul ca răspuns
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${job.name || 'generated'}.pdf"`);
@@ -120,6 +104,41 @@ app.get('/generate-pdf', async (req, res) => {
   } catch (error) {
     console.error('Error processing request:', error);
     res.status(500).send(`Error generating PDF: ${error.message}`);
+  }
+});
+
+// Route pentru a accepta cereri direct din UI
+app.post('/create-pdf', async (req, res) => {
+  try {
+    const { name, urls, pageSize, landscape, sectionsToRemove } = req.body;
+    
+    if (!urls || !Array.isArray(urls) || urls.length === 0) {
+      return res.status(400).json({ error: 'No valid URLs provided' });
+    }
+    
+    // Creăm job-ul
+    const job = {
+      name: name || 'Generated PDF',
+      urls: urls,
+      options: {
+        pageSize: pageSize || 'A4',
+        landscape: landscape || false,
+        sectionsToRemove: sectionsToRemove || []
+      }
+    };
+    
+    // Generăm PDF-ul
+    const pdfBuffer = await generatePDF(job);
+    
+    // Trim PDF ca răspuns
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${job.name || 'generated'}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+    
+  } catch (error) {
+    console.error('Error creating PDF:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
