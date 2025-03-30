@@ -1,7 +1,9 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { generatePDF } = require('./api/pdf-generator');
+// Corectare pentru versiuni mai vechi de Node.js
+const pdfGenerator = require('./api/pdf-generator');
+const generatePDF = pdfGenerator.generatePDF;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
