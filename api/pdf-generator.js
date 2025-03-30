@@ -1,13 +1,30 @@
 const https = require('https');
 
-// Funcție pentru a face cereri HTTP
+// Funcție îmbunătățită pentru a face cereri HTTP cu logging
 async function makeRequest(url, options, data) {
+  console.log(`Making request to: ${url}`);
+  console.log(`Request options:`, JSON.stringify(options));
+  console.log(`Request body:`, data);
+  
   return new Promise((resolve, reject) => {
     const req = https.request(url, options, (res) => {
       const chunks = [];
       res.on('data', (chunk) => chunks.push(chunk));
       res.on('end', () => {
         const body = Buffer.concat(chunks);
+        console.log(`Response status: ${res.statusCode}`);
+        
+        // Dacă avem un răspuns de eroare, încercăm să îl formatăm pentru debugging
+        if (res.statusCode >= 400) {
+          let responseBody = "";
+          try {
+            responseBody = body.toString('utf8');
+            console.log(`Error response body: ${responseBody}`);
+          } catch (e) {
+            console.log(`Could not parse error response: ${e.message}`);
+          }
+        }
+        
         if (res.statusCode >= 200 && res.statusCode < 300) {
           resolve(body);
         } else {
@@ -17,6 +34,7 @@ async function makeRequest(url, options, data) {
     });
 
     req.on('error', (error) => {
+      console.error(`Request error:`, error);
       reject(error);
     });
 
@@ -28,10 +46,11 @@ async function makeRequest(url, options, data) {
   });
 }
 
-// Funcție pentru generarea PDF-ului
+// Funcție corectată pentru generarea PDF-ului
 async function generatePDF(job) {
   try {
     console.log('Generating PDF using Browserless.io...');
+    console.log('Job details:', JSON.stringify(job));
     
     // Verifică API key
     const browserlessApiKey = process.env.BROWSERLESS_API_KEY;
@@ -39,8 +58,12 @@ async function generatePDF(job) {
       throw new Error('Browserless API key is not configured');
     }
     
-    // Folsim doar primul URL pentru simplitate
-    // Poți extinde pentru a procesa mai multe URL-uri
+    // Verificăm dacă avem cel puțin un URL
+    if (!job.urls || job.urls.length === 0) {
+      throw new Error('No URLs provided for PDF generation');
+    }
+    
+    // Folosim doar primul URL pentru simplitate
     const url = job.urls[0];
     console.log(`Processing URL: ${url}`);
     
@@ -53,6 +76,8 @@ async function generatePDF(job) {
       }
     };
     
+    // Folosim un format simplu, conform documentației Browserless
+    // https://www.browserless.io/docs/pdf
     const requestBody = JSON.stringify({
       url: url,
       options: {
@@ -64,22 +89,11 @@ async function generatePDF(job) {
           right: '20px',
           bottom: '20px',
           left: '20px'
-        },
-        displayHeaderFooter: true,
-        headerTemplate: `
-          <div style="width: 100%; font-size: 10px; text-align: center; color: #666;">
-            <span>${job.name || 'PDF Report'}</span>
-          </div>
-        `,
-        footerTemplate: `
-          <div style="width: 100%; font-size: 10px; text-align: center; color: #666;">
-            <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
-          </div>
-        `
-      },
-      waitFor: 'networkidle2'
+        }
+      }
     });
     
+    console.log('Sending request to Browserless.io...');
     const pdfBuffer = await makeRequest(
       `https://chrome.browserless.io/pdf?token=${browserlessApiKey}`,
       options,
