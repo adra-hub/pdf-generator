@@ -10,12 +10,9 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Servim fișiere statice pentru interfață
-app.use(express.static('public'));
-
 // Rute
 app.get('/', (req, res) => {
-  res.sendFile(__dirname + '/public/index.html');
+  res.send('PDF Generator Service is running. Use /generate-pdf endpoint to generate PDFs.');
 });
 
 // Ruta pentru generarea PDF
