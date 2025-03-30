@@ -41,246 +41,7 @@ async function makeRequest(url, options, data) {
   });
 }
 
-// CSS pentru a deschide acordeoanele și a elimina secțiunile specificate
-function generateCSS(sectionsToRemove = []) {
-  // CSS de bază pentru styling-ul general
-  let css = `
-    /* Make images reasonable size */
-    img {
-      max-width: 100% !important;
-      height: auto !important;
-      max-height: 400px !important;
-    }
-
-    /* Improve readability */
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
-      padding: 20px !important;
-      max-width: 100% !important;
-      overflow-x: hidden !important;
-    }
-    
-    pre, code {
-      white-space: pre-wrap !important;
-      max-width: 100% !important;
-      overflow-x: auto !important;
-    }
-    
-    /* Force all accordion elements to be visible */
-    details:not([open]), 
-    [aria-expanded="false"],
-    .accordion-button.collapsed,
-    .accordion-collapse.collapse:not(.show),
-    .collapse:not(.show) {
-      display: block !important;
-      visibility: visible !important;
-      opacity: 1 !important;
-      height: auto !important;
-      max-height: none !important;
-      overflow: visible !important;
-    }
-    
-    /* Ensure accordion content is visible */
-    details > *,
-    .accordion-body, 
-    .collapse, 
-    .accordion-collapse,
-    [role="tabpanel"] {
-      display: block !important;
-      height: auto !important;
-      max-height: none !important;
-      visibility: visible !important;
-      opacity: 1 !important;
-    }
-    
-    /* Bootstrap specific accordions */
-    .accordion-button.collapsed::after {
-      transform: rotate(180deg) !important;
-    }
-    
-    /* Remove common interfering elements */
-    .sticky-top, 
-    .fixed-top, 
-    .fixed-bottom,
-    nav.navbar-fixed, 
-    .cookie-banner,
-    #cookie-notice,
-    [id*="cookie-"],
-    [class*="cookie-"],
-    [id*="popup"],
-    [class*="popup"],
-    #overlay,
-    .overlay,
-    .modal,
-    .dialog {
-      display: none !important;
-      visibility: hidden !important;
-    }
-  `;
-
-  // Adăugăm CSS pentru secțiunile de eliminat
-  if (sectionsToRemove && sectionsToRemove.length > 0) {
-    console.log(`Adding CSS for removing sections: ${sectionsToRemove.join(', ')}`);
-    const removalCSS = sectionsToRemove.map(selector => {
-      // Asigurăm că selectorul este valabil
-      try {
-        document.querySelector(selector);
-        return `
-          ${selector} {
-            display: none !important;
-            visibility: hidden !important;
-            height: 0 !important;
-            min-height: 0 !important;
-            max-height: 0 !important;
-            overflow: hidden !important;
-            position: absolute !important;
-            left: -9999px !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-          }
-        `;
-      } catch (e) {
-        // Dacă selectorul nu e valid, încercăm să-l corectăm
-        // Selectorul poate conține caractere care trebuie escape-uite
-        const escapedSelector = selector.replace(/"/g, '\\"').replace(/'/g, "\\'");
-        return `
-          ${escapedSelector} {
-            display: none !important;
-            visibility: hidden !important;
-            height: 0 !important;
-            min-height: 0 !important;
-            max-height: 0 !important;
-            overflow: hidden !important;
-            position: absolute !important;
-            left: -9999px !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-          }
-        `;
-      }
-    }).join('\n');
-    
-    css += '\n' + removalCSS;
-  }
-  
-  return css;
-}
-
-// JavaScript pentru a deschide acordeoanele
-function getAccordionScript() {
-  return `
-    function expandAllAccordions() {
-      // Expand all details elements
-      document.querySelectorAll('details').forEach(detail => {
-        detail.setAttribute('open', 'true');
-      });
-      
-      // Bootstrap accordions
-      document.querySelectorAll('.accordion-button.collapsed').forEach(button => {
-        try {
-          button.classList.remove('collapsed');
-          button.setAttribute('aria-expanded', 'true');
-        } catch(e) {}
-      });
-      
-      document.querySelectorAll('.accordion-collapse.collapse:not(.show)').forEach(collapse => {
-        try {
-          collapse.classList.add('show');
-        } catch(e) {}
-      });
-      
-      // General accordions by aria-expanded attribute
-      document.querySelectorAll('[aria-expanded="false"]').forEach(elem => {
-        try {
-          elem.setAttribute('aria-expanded', 'true');
-        } catch(e) {}
-      });
-      
-      // Collapse elements
-      document.querySelectorAll('.collapse:not(.show)').forEach(collapse => {
-        try {
-          collapse.classList.add('show');
-          collapse.style.height = 'auto';
-          collapse.style.display = 'block';
-        } catch(e) {}
-      });
-      
-      // Toggle buttons
-      document.querySelectorAll('[data-toggle="collapse"]').forEach(toggle => {
-        try {
-          toggle.setAttribute('aria-expanded', 'true');
-        } catch(e) {}
-      });
-      
-      // Any elements with a hidden state
-      document.querySelectorAll('[aria-hidden="true"]').forEach(elem => {
-        try {
-          if (elem.classList.contains('accordion-body') || 
-              elem.classList.contains('collapse') ||
-              elem.closest('.accordion')) {
-            elem.setAttribute('aria-hidden', 'false');
-          }
-        } catch(e) {}
-      });
-      
-      // Force any tab panels to be visible
-      document.querySelectorAll('[role="tabpanel"]').forEach(panel => {
-        try {
-          panel.style.display = 'block';
-          panel.style.visibility = 'visible';
-          panel.style.height = 'auto';
-          panel.style.opacity = '1';
-        } catch(e) {}
-      });
-      
-      console.log('All accordions and collapsible elements expanded');
-    }
-    
-    // Execute after initial page load
-    document.addEventListener('DOMContentLoaded', function() {
-      expandAllAccordions();
-      
-      // Set a timeout for delayed elements
-      setTimeout(expandAllAccordions, 1000);
-    });
-    
-    // Run again after all resources are loaded
-    window.addEventListener('load', function() {
-      expandAllAccordions();
-      
-      // Run again after a delay for any dynamic content
-      setTimeout(expandAllAccordions, 2000);
-    });
-    
-    // Also remove sections programmatically that might be difficult to target with CSS
-    function removeElementsBySelectors(selectors) {
-      if (!selectors || !selectors.length) return;
-      
-      selectors.forEach(selector => {
-        try {
-          const elements = document.querySelectorAll(selector);
-          elements.forEach(el => {
-            try {
-              el.style.display = 'none';
-              el.style.visibility = 'hidden';
-              // Also try removing from DOM
-              if (el.parentNode) {
-                el.parentNode.removeChild(el);
-              }
-            } catch(e) {}
-          });
-        } catch(e) {}
-      });
-    }
-    
-    setTimeout(function() {
-      // Selector list would be injected here dynamically
-      removeElementsBySelectors(SELECTOR_LIST_PLACEHOLDER);
-    }, 1500);
-  `;
-}
-
-// Funcție pentru a combina mai multe PDF-uri în unul singur
+// Funcția pentru a combina mai multe PDF-uri în unul singur
 async function mergePDFs(pdfBuffers) {
   try {
     console.log(`Merging ${pdfBuffers.length} PDFs into one document...`);
@@ -341,56 +102,221 @@ async function generatePDF(job) {
       const options = {
         method: 'POST',
         hostname: 'chrome.browserless.io',
-        path: `/pdf?token=${browserlessApiKey}`,
+        path: `/function?token=${browserlessApiKey}`,
         headers: {
           'Content-Type': 'application/json'
         }
       };
       
-      // Generăm CSS personalizat care include secțiunile de eliminat
-      const customCSS = generateCSS(job.options?.sectionsToRemove || []);
+      // Pregătim scenariu care va fi executat de browserless
+      // Această abordare ne dă control complet asupra browserului
+      const scriptCode = `
+        module.exports = async ({ page, context }) => {
+          const { url, options, sectionsToRemove } = context;
+          
+          // Configurăm pagina
+          await page.setViewport({ width: 1200, height: 800 });
+          
+          // Navigăm la URL
+          console.log('Navigating to URL:', url);
+          await page.goto(url, { 
+            waitUntil: 'networkidle2',
+            timeout: 30000
+          });
+          
+          // Injectăm CSS pentru a elimina secțiunile specificate
+          if (sectionsToRemove && sectionsToRemove.length > 0) {
+            console.log('Removing sections:', sectionsToRemove);
+            
+            const cssContent = sectionsToRemove.map(selector => `
+              ${selector} {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                height: 0 !important;
+                position: absolute !important;
+                pointer-events: none !important;
+                left: -9999px !important;
+              }
+            `).join('\\n');
+            
+            await page.addStyleTag({ content: cssContent });
+            
+            // Încercăm și o abordare JavaScript pentru a elimina elementele
+            for (const selector of sectionsToRemove) {
+              try {
+                await page.evaluate((sel) => {
+                  document.querySelectorAll(sel).forEach(el => {
+                    if (el && el.parentNode) {
+                      el.parentNode.removeChild(el);
+                    }
+                  });
+                }, selector);
+              } catch (e) {
+                console.log('Error removing element with selector:', selector, e);
+              }
+            }
+          }
+          
+          // Expandăm acordeoanele - abordare cu evaluate pentru a avea acces direct la DOM
+          await page.evaluate(() => {
+            // Funcție pentru a expanda acordeoanele
+            function expandAccordions() {
+              // Selectori comuni pentru acordeoane
+              const selectors = [
+                '.accordion-button.collapsed',
+                '.accordion-collapse.collapse:not(.show)',
+                '.collapse:not(.show)',
+                'details:not([open])',
+                '[aria-expanded="false"]',
+                '.accordion-header button',
+                '.accordion [data-bs-toggle="collapse"]',
+                '[data-toggle="collapse"]',
+                '.accordion .card-header button'
+              ];
+              
+              // Procesăm fiecare selector
+              selectors.forEach(selector => {
+                document.querySelectorAll(selector).forEach(el => {
+                  try {
+                    // Acordeoane Bootstrap
+                    if (el.classList.contains('accordion-button') || 
+                        el.hasAttribute('data-bs-toggle') || 
+                        el.hasAttribute('data-toggle')) {
+                      el.classList.remove('collapsed');
+                      el.setAttribute('aria-expanded', 'true');
+                      
+                      // Găsim collapseul asociat
+                      let target = el.getAttribute('data-bs-target') || 
+                                  el.getAttribute('data-target') || 
+                                  el.getAttribute('href');
+                      
+                      if (target && target.startsWith('#')) {
+                        let collapse = document.querySelector(target);
+                        if (collapse) {
+                          collapse.classList.add('show');
+                          collapse.style.height = 'auto';
+                          collapse.style.maxHeight = 'none';
+                        }
+                      }
+                    }
+                    // Elemente collapse
+                    else if (el.classList.contains('collapse') || 
+                             el.classList.contains('accordion-collapse')) {
+                      el.classList.add('show');
+                      el.style.height = 'auto';
+                      el.style.maxHeight = 'none';
+                    }
+                    // Elemente details
+                    else if (el.tagName === 'DETAILS') {
+                      el.setAttribute('open', 'true');
+                    }
+                    // Orice element cu aria-expanded
+                    else if (el.hasAttribute('aria-expanded')) {
+                      el.setAttribute('aria-expanded', 'true');
+                    }
+                  } catch (e) {
+                    console.error('Error expanding accordion element:', e);
+                  }
+                });
+              });
+              
+              // Forțăm toate elementele de tip collapse să fie vizibile
+              document.querySelectorAll('.collapse, .accordion-collapse').forEach(el => {
+                el.classList.add('show');
+                el.style.height = 'auto';
+                el.style.maxHeight = 'none';
+                el.style.display = 'block';
+              });
+            }
+            
+            // Executăm funcția și apoi o executăm și după un delay
+            expandAccordions();
+            setTimeout(expandAccordions, 1000);
+            
+            // Adăugăm și CSS pentru a forța acordeoanele să fie deschise
+            const style = document.createElement('style');
+            style.textContent = \`
+              .collapse, .accordion-collapse { 
+                display: block !important; 
+                height: auto !important; 
+                max-height: none !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+              }
+              [aria-expanded="false"] { 
+                display: block !important;
+                visibility: visible !important;
+              }
+              details:not([open]) { 
+                display: block !important;
+              }
+              details:not([open]) > * { 
+                display: block !important;
+              }
+              .accordion-button.collapsed::after {
+                transform: rotate(180deg) !important;
+              }
+            \`;
+            document.head.appendChild(style);
+          });
+          
+          // Așteptăm puțin pentru a permite elementelor să se actualizeze
+          await page.waitForTimeout(2000);
+          
+          // Generăm PDF
+          console.log('Generating PDF...');
+          const pdfBuffer = await page.pdf({
+            format: options.pageSize || 'A4',
+            landscape: options.landscape || false,
+            printBackground: true,
+            margin: options.margins || {
+              top: '20px',
+              right: '20px',
+              bottom: '20px',
+              left: '20px'
+            },
+            displayHeaderFooter: true,
+            headerTemplate: \`
+              <div style="width: 100%; font-size: 10px; text-align: center; color: #666;">
+                <span>\${options.name || 'PDF Report'}</span>
+              </div>
+            \`,
+            footerTemplate: \`
+              <div style="width: 100%; font-size: 10px; text-align: center; color: #666;">
+                <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
+              </div>
+            \`
+          });
+          
+          return pdfBuffer;
+        };
+      `;
       
-      // Injectăm lista de selectori în scriptul de acordeoane
-      const selectorsJson = JSON.stringify(job.options?.sectionsToRemove || []);
-      const accordionScript = getAccordionScript().replace('SELECTOR_LIST_PLACEHOLDER', selectorsJson);
-      
-      // Pregătim body-ul cererii
+      // Pregătim body-ul cererii cu scriptul
       const requestBody = JSON.stringify({
-        url: url,
-        options: {
-          printBackground: true,
-          format: job.options?.pageSize || 'A4',
-          landscape: job.options?.landscape || false,
-          margin: {
-            top: '20px',
-            right: '20px',
-            bottom: '20px',
-            left: '20px'
+        code: scriptCode,
+        context: {
+          url: url,
+          options: {
+            pageSize: job.options?.pageSize || 'A4',
+            landscape: job.options?.landscape || false,
+            name: job.name || 'PDF Report',
+            margins: {
+              top: '20px',
+              right: '20px',
+              bottom: '20px',
+              left: '20px'
+            }
           },
-          displayHeaderFooter: true,
-          headerTemplate: `
-            <div style="width: 100%; font-size: 10px; text-align: center; color: #666;">
-              <span>${job.name || 'PDF Report'}</span>
-            </div>
-          `,
-          footerTemplate: `
-            <div style="width: 100%; font-size: 10px; text-align: center; color: #666;">
-              <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
-            </div>
-          `
-        },
-        gotoOptions: {
-          waitUntil: 'networkidle2',
-          timeout: 40000
-        },
-        addStyleTag: [{ content: customCSS }],
-        addScriptTag: [{ content: accordionScript }]
+          sectionsToRemove: job.options?.sectionsToRemove || []
+        }
       });
       
       try {
         console.log(`Sending request to Browserless.io for URL: ${url}`);
         const pdfBuffer = await makeRequest(
-          `https://chrome.browserless.io/pdf?token=${browserlessApiKey}`,
+          `https://chrome.browserless.io/function?token=${browserlessApiKey}`,
           options,
           requestBody
         );
