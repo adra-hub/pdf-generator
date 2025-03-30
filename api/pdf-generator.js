@@ -106,7 +106,14 @@ function mergePDFs(pdfBuffers) {
   });
 }
 
-// Funcție pentru a genera un PDF
+// Funcție pentru a aștepta un anumit număr de milisecunde
+function sleep(ms) {
+  return new Promise(function(resolve) {
+    setTimeout(resolve, ms);
+  });
+}
+
+// Funcție pentru a genera un PDF cu toate URL-urile
 function generatePDF(job) {
   return new Promise(function(resolve, reject) {
     try {
@@ -123,226 +130,222 @@ function generatePDF(job) {
         throw new Error('No URLs provided for PDF generation');
       }
       
-      console.log('Processing ' + job.urls.length + ' URLs individually...');
+      console.log('Processing ' + job.urls.length + ' URLs sequentially...');
       
-      // Procesăm fiecare URL individual
-      const pdfPromises = [];
+      // Procesăm fiecare URL SECVENȚIAL cu pauze între ei
+      const pdfBuffers = [];
       
-      for (let i = 0; i < job.urls.length; i++) {
-        const url = job.urls[i];
-        
-        // Creăm funcția pentru a genera PDF-ul pentru acest URL
-        const generateSinglePDF = function() {
-          return new Promise(function(pdfResolve, pdfReject) {
-            console.log('Processing URL ' + (i+1) + '/' + job.urls.length + ': ' + url);
+      // Folosim o funcție recursivă pentru a procesa URL-urile unul câte unul
+      function processNextUrl(index) {
+        // Verificăm dacă am terminat de procesat toate URL-urile
+        if (index >= job.urls.length) {
+          // Am terminat, combinăm PDF-urile
+          console.log('Successfully processed all URLs. Combining PDFs...');
           
-            const options = {
-              method: 'POST',
-              hostname: 'chrome.browserless.io',
-              path: '/pdf?token=' + browserlessApiKey,
-              headers: {
-                'Content-Type': 'application/json'
-              }
-            };
-            
-            // Preparăm CSS pentru a elimina secțiuni și a deschide acordeoane
-            let customCSS = `
-              /* Make images reasonable size */
-              img {
-                max-width: 100% !important;
-                height: auto !important;
-                max-height: 400px !important;
-              }
-            
-              /* Force all accordion elements to be visible */
-              [aria-expanded="false"],
-              .accordion-button.collapsed,
-              .accordion-collapse.collapse:not(.show),
-              .collapse:not(.show) {
-                display: block !important;
-                visibility: visible !important;
-                height: auto !important;
-                max-height: none !important;
-              }
-              
-              /* Any Bootstrap accordion */
-              .accordion-body, 
-              .collapse, 
-              .accordion-collapse {
-                display: block !important;
-                height: auto !important;
-                max-height: none !important;
-              }
-              
-              /* Remove common interfering elements */
-              .sticky-top, 
-              .fixed-top, 
-              .fixed-bottom,
-              nav.navbar-fixed,
-              .cookie-banner,
-              #cookie-notice {
-                display: none !important;
-              }
-            `;
-            
-            // Adăugăm CSS pentru secțiunile de eliminat
-            if (job.options && job.options.sectionsToRemove && job.options.sectionsToRemove.length > 0) {
-              for (let j = 0; j < job.options.sectionsToRemove.length; j++) {
-                const selector = job.options.sectionsToRemove[j];
-                customCSS += `
-                  ${selector} {
-                    display: none !important;
-                    visibility: hidden !important;
-                    height: 0 !important;
-                    max-height: 0 !important;
-                    overflow: hidden !important;
-                    position: absolute !important;
-                    left: -9999px !important;
-                  }
-                `;
-              }
-            }
-            
-            // Scriem JavaScript pentru a deschide acordeoanele
-            const accordionScript = `
-              function expandAccordions() {
-                // Bootstrap accordions
-                var accordionButtons = document.querySelectorAll('.accordion-button.collapsed');
-                for (var i = 0; i < accordionButtons.length; i++) {
-                  try {
-                    accordionButtons[i].classList.remove('collapsed');
-                    accordionButtons[i].setAttribute('aria-expanded', 'true');
-                  } catch(e) {}
-                }
-                
-                var accordionCollapse = document.querySelectorAll('.accordion-collapse.collapse:not(.show)');
-                for (var i = 0; i < accordionCollapse.length; i++) {
-                  try {
-                    accordionCollapse[i].classList.add('show');
-                  } catch(e) {}
-                }
-                
-                // General accordions by aria-expanded attribute
-                var ariaCollapsed = document.querySelectorAll('[aria-expanded="false"]');
-                for (var i = 0; i < ariaCollapsed.length; i++) {
-                  try {
-                    ariaCollapsed[i].setAttribute('aria-expanded', 'true');
-                  } catch(e) {}
-                }
-                
-                // Collapse elements
-                var collapseElements = document.querySelectorAll('.collapse:not(.show)');
-                for (var i = 0; i < collapseElements.length; i++) {
-                  try {
-                    collapseElements[i].classList.add('show');
-                    collapseElements[i].style.height = 'auto';
-                  } catch(e) {}
-                }
-                
-                // Remove sections programmatically
-                var sectionsToRemove = ${JSON.stringify(job.options && job.options.sectionsToRemove ? job.options.sectionsToRemove : [])};
-                for (var i = 0; i < sectionsToRemove.length; i++) {
-                  try {
-                    var elements = document.querySelectorAll(sectionsToRemove[i]);
-                    for (var j = 0; j < elements.length; j++) {
-                      if (elements[j] && elements[j].parentNode) {
-                        elements[j].parentNode.removeChild(elements[j]);
-                      }
-                    }
-                  } catch(e) {}
-                }
-              }
-              
-              // Execute after page load
-              expandAccordions();
-              
-              // Also try after a short delay
-              setTimeout(expandAccordions, 1000);
-            `;
-            
-            // Pregătim body-ul cererii
-            const requestBody = JSON.stringify({
-              url: url,
-              options: {
-                printBackground: true,
-                format: job.options && job.options.pageSize ? job.options.pageSize : 'A4',
-                landscape: job.options && job.options.landscape ? job.options.landscape : false,
-                margin: {
-                  top: '20px',
-                  right: '20px',
-                  bottom: '20px',
-                  left: '20px'
-                },
-                displayHeaderFooter: true,
-                headerTemplate: `
-                  <div style="width: 100%; font-size: 10px; text-align: center; color: #666;">
-                    <span>${job.name || 'PDF Report'}</span>
-                  </div>
-                `,
-                footerTemplate: `
-                  <div style="width: 100%; font-size: 10px; text-align: center; color: #666;">
-                    <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
-                  </div>
-                `
-              },
-              gotoOptions: {
-                waitUntil: 'networkidle2',
-                timeout: 30000
-              },
-              addStyleTag: [{ content: customCSS }],
-              addScriptTag: [{ content: accordionScript }]
-            });
-            
-            console.log('Sending request to Browserless.io for URL: ' + url);
-            makeRequest(
-              'https://chrome.browserless.io/pdf?token=' + browserlessApiKey,
-              options,
-              requestBody
-            ).then(function(pdfBuffer) {
-              console.log('Successfully generated PDF for URL ' + (i+1) + ', size: ' + pdfBuffer.length + ' bytes');
-              pdfResolve(pdfBuffer);
-            }).catch(function(error) {
-              console.error('Error generating PDF for URL ' + (i+1) + ':', error);
-              pdfReject(error);
-            });
-          });
-        };
-        
-        // Adăugăm promisiunea la array
-        pdfPromises.push(generateSinglePDF());
-      }
-      
-      // Așteptăm ca toate PDF-urile să fie generate
-      Promise.all(pdfPromises.map(function(promise) {
-        // Convertim promisiunile pentru a nu eșua
-        return promise.catch(function(err) {
-          console.error('Error in PDF generation:', err);
-          return null; // returnăm null pentru promisiuni eșuate
-        });
-      })).then(function(results) {
-        // Filtrăm rezultatele nule
-        const pdfBuffers = results.filter(function(result) {
-          return result !== null;
-        });
-        
-        // Verificăm dacă am generat cel puțin un PDF
-        if (pdfBuffers.length === 0) {
-          throw new Error('Could not generate any PDFs. Check the Browserless.io API key and URLs.');
+          if (pdfBuffers.length === 0) {
+            return reject(new Error('Could not generate any PDFs. Check URLs and API key.'));
+          }
+          
+          mergePDFs(pdfBuffers).then(resolve).catch(reject);
+          return;
         }
         
-        console.log('Successfully generated ' + pdfBuffers.length + ' out of ' + job.urls.length + ' PDFs');
+        const url = job.urls[index];
+        console.log('Processing URL ' + (index+1) + '/' + job.urls.length + ': ' + url);
+      
+        const options = {
+          method: 'POST',
+          hostname: 'chrome.browserless.io',
+          path: '/pdf?token=' + browserlessApiKey,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        };
         
-        // Combinăm PDF-urile
-        mergePDFs(pdfBuffers).then(function(mergedPdf) {
-          resolve(mergedPdf);
-        }).catch(function(error) {
-          console.error('Error merging PDFs:', error);
-          // Dacă eșuează combinarea, returnăm primul PDF
-          resolve(pdfBuffers[0]);
+        // Preparăm CSS pentru a elimina secțiuni și a deschide acordeoane
+        let customCSS = `
+          /* Make images reasonable size */
+          img {
+            max-width: 100% !important;
+            height: auto !important;
+            max-height: 400px !important;
+          }
+        
+          /* Force all accordion elements to be visible */
+          [aria-expanded="false"],
+          .accordion-button.collapsed,
+          .accordion-collapse.collapse:not(.show),
+          .collapse:not(.show) {
+            display: block !important;
+            visibility: visible !important;
+            height: auto !important;
+            max-height: none !important;
+          }
+          
+          /* Any Bootstrap accordion */
+          .accordion-body, 
+          .collapse, 
+          .accordion-collapse {
+            display: block !important;
+            height: auto !important;
+            max-height: none !important;
+          }
+          
+          /* Remove common interfering elements */
+          .sticky-top, 
+          .fixed-top, 
+          .fixed-bottom,
+          nav.navbar-fixed,
+          .cookie-banner,
+          #cookie-notice {
+            display: none !important;
+          }
+        `;
+        
+        // Adăugăm CSS pentru secțiunile de eliminat
+        if (job.options && job.options.sectionsToRemove && job.options.sectionsToRemove.length > 0) {
+          console.log('Adding CSS to remove sections: ', job.options.sectionsToRemove.join(', '));
+          
+          for (let j = 0; j < job.options.sectionsToRemove.length; j++) {
+            const selector = job.options.sectionsToRemove[j];
+            customCSS += `
+              ${selector} {
+                display: none !important;
+                visibility: hidden !important;
+                height: 0 !important;
+                max-height: 0 !important;
+                overflow: hidden !important;
+                position: absolute !important;
+                left: -9999px !important;
+              }
+            `;
+          }
+        }
+        
+        // Scriem JavaScript pentru a deschide acordeoanele
+        const accordionScript = `
+          function expandAccordions() {
+            // Bootstrap accordions
+            var accordionButtons = document.querySelectorAll('.accordion-button.collapsed');
+            for (var i = 0; i < accordionButtons.length; i++) {
+              try {
+                accordionButtons[i].classList.remove('collapsed');
+                accordionButtons[i].setAttribute('aria-expanded', 'true');
+              } catch(e) {}
+            }
+            
+            var accordionCollapse = document.querySelectorAll('.accordion-collapse.collapse:not(.show)');
+            for (var i = 0; i < accordionCollapse.length; i++) {
+              try {
+                accordionCollapse[i].classList.add('show');
+              } catch(e) {}
+            }
+            
+            // General accordions by aria-expanded attribute
+            var ariaCollapsed = document.querySelectorAll('[aria-expanded="false"]');
+            for (var i = 0; i < ariaCollapsed.length; i++) {
+              try {
+                ariaCollapsed[i].setAttribute('aria-expanded', 'true');
+              } catch(e) {}
+            }
+            
+            // Collapse elements
+            var collapseElements = document.querySelectorAll('.collapse:not(.show)');
+            for (var i = 0; i < collapseElements.length; i++) {
+              try {
+                collapseElements[i].classList.add('show');
+                collapseElements[i].style.height = 'auto';
+              } catch(e) {}
+            }
+            
+            // Remove sections programmatically
+            var sectionsToRemove = ${JSON.stringify(job.options && job.options.sectionsToRemove ? job.options.sectionsToRemove : [])};
+            for (var i = 0; i < sectionsToRemove.length; i++) {
+              try {
+                var elements = document.querySelectorAll(sectionsToRemove[i]);
+                for (var j = 0; j < elements.length; j++) {
+                  if (elements[j] && elements[j].parentNode) {
+                    elements[j].parentNode.removeChild(elements[j]);
+                  }
+                }
+              } catch(e) {}
+            }
+          }
+          
+          // Execute after page load
+          expandAccordions();
+          
+          // Also try after a short delay
+          setTimeout(expandAccordions, 1500);
+        `;
+        
+        // Pregătim body-ul cererii
+        const requestBody = JSON.stringify({
+          url: url,
+          options: {
+            printBackground: true,
+            format: job.options && job.options.pageSize ? job.options.pageSize : 'A4',
+            landscape: job.options && job.options.landscape ? job.options.landscape : false,
+            margin: {
+              top: '20px',
+              right: '20px',
+              bottom: '20px',
+              left: '20px'
+            },
+            displayHeaderFooter: true,
+            headerTemplate: `
+              <div style="width: 100%; font-size: 10px; text-align: center; color: #666;">
+                <span>${job.name || 'PDF Report'}</span>
+              </div>
+            `,
+            footerTemplate: `
+              <div style="width: 100%; font-size: 10px; text-align: center; color: #666;">
+                <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
+              </div>
+            `
+          },
+          gotoOptions: {
+            waitUntil: 'networkidle2',
+            timeout: 30000
+          },
+          addStyleTag: [{ content: customCSS }],
+          addScriptTag: [{ content: accordionScript }]
         });
-      }).catch(function(error) {
-        reject(error);
-      });
+        
+        console.log('Sending request to Browserless.io for URL: ' + url);
+        makeRequest(
+          'https://chrome.browserless.io/pdf?token=' + browserlessApiKey,
+          options,
+          requestBody
+        ).then(function(pdfBuffer) {
+          console.log('Successfully generated PDF for URL ' + (index+1) + ', size: ' + pdfBuffer.length + ' bytes');
+          pdfBuffers.push(pdfBuffer);
+          
+          // Așteptăm 3 secunde între cereri pentru a evita rate limiting
+          const waitTime = 3000; // 3 secunde
+          console.log('Waiting ' + (waitTime/1000) + ' seconds before processing next URL...');
+          
+          sleep(waitTime).then(function() {
+            // Procesăm următorul URL
+            processNextUrl(index + 1);
+          });
+          
+        }).catch(function(error) {
+          console.error('Error generating PDF for URL ' + (index+1) + ':', error);
+          
+          // Așteptăm mai mult (5 secunde) după o eroare
+          const errorWaitTime = 5000; // 5 secunde
+          console.log('Error occurred. Waiting ' + (errorWaitTime/1000) + ' seconds before continuing...');
+          
+          sleep(errorWaitTime).then(function() {
+            // Continuăm cu următorul URL chiar dacă am avut o eroare
+            processNextUrl(index + 1);
+          });
+        });
+      }
+      
+      // Începem procesarea cu primul URL
+      processNextUrl(0);
       
     } catch (error) {
       console.error('Error in PDF generation:', error);
